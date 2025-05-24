@@ -1,0 +1,178 @@
+.editorPaneWrapper {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Importante para que CodeMirror y la preview no desborden */
+  background-color: var(--current-bg-primary);
+}
+
+.editorToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 15px;
+  background-color: var(--current-bg-secondary); /* Un poco diferente del fondo principal */
+  border-bottom: 1px solid var(--current-border-color);
+  flex-shrink: 0; /* Evita que la barra de herramientas se encoja */
+  min-height: 30px; /* Altura mínima para la barra de herramientas */
+}
+
+.fileName {
+  font-size: 0.9em;
+  color: var(--current-text-secondary);
+}
+
+.fileName strong {
+  color: var(--current-text-primary);
+  font-weight: 500;
+}
+
+.toolbarActions button {
+  margin-left: 10px;
+  background-color: var(--current-bg-tertiary);
+  color: var(--current-text-primary);
+  border: 1px solid var(--current-border-color);
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85em;
+}
+
+.toolbarActions button:hover {
+  background-color: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+.toolbarActions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: var(--current-bg-tertiary);
+  border-color: var(--current-border-color);
+  color: var(--current-text-secondary);
+}
+
+
+.editorArea {
+  flex-grow: 1;
+  display: flex;
+  overflow: hidden; /* Para que los hijos manejen su propio scroll */
+}
+
+.editorArea.splitView .codeMirrorEditor,
+.editorArea.splitView .markdownPreview {
+  width: 50%;
+}
+
+.codeMirrorEditor {
+  flex-grow: 1; /* Ocupa todo el espacio si no hay preview */
+  height: 100%;
+  overflow-y: auto; /* Scroll para el editor */
+}
+
+/* Estilos para CodeMirror (asegúrate de que el tema se aplica correctamente) */
+.codeMirrorEditor .cm-editor {
+  height: 100%;
+  font-size: 1em; /* Ajusta el tamaño de fuente del editor */
+  font-family: var(--editor-font-family);
+}
+
+.markdownPreview {
+  flex-grow: 1; /* Ocupa todo el espacio si no hay editor (o 50% en split) */
+  height: 100%;
+  overflow-y: auto; /* Scroll para la preview */
+  padding: 20px;
+  background-color: var(--current-bg-primary); /* Mismo fondo que el editor o ligeramente diferente */
+  border-left: 1px solid var(--current-border-color); /* Separador en vista dividida */
+  color: var(--current-text-primary);
+  line-height: 1.6;
+}
+
+/* Estilos básicos para elementos Markdown en la preview */
+.markdownPreview h1, .markdownPreview h2, .markdownPreview h3 {
+  color: var(--current-text-primary);
+  border-bottom: 1px solid var(--current-border-color);
+  padding-bottom: 0.3em;
+  margin-top: 1.5em;
+  margin-bottom: 1em;
+}
+.markdownPreview h1 { font-size: 1.8em; }
+.markdownPreview h2 { font-size: 1.5em; }
+.markdownPreview h3 { font-size: 1.3em; }
+
+.markdownPreview p {
+  margin-bottom: 1em;
+}
+
+.markdownPreview a {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+.markdownPreview a:hover {
+  text-decoration: underline;
+}
+
+.markdownPreview code {
+  background-color: var(--current-bg-secondary);
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  border-radius: 3px;
+  font-family: var(--editor-font-family);
+}
+
+.markdownPreview pre {
+  background-color: var(--current-bg-secondary);
+  padding: 1em;
+  border-radius: 5px;
+  overflow-x: auto;
+}
+
+.markdownPreview pre code {
+  padding: 0;
+  margin: 0;
+  font-size: inherit;
+  background: none;
+}
+
+.markdownPreview ul, .markdownPreview ol {
+  padding-left: 2em;
+  margin-bottom: 1em;
+}
+
+.markdownPreview blockquote {
+  border-left: 0.25em solid var(--current-border-color);
+  padding: 0 1em;
+  color: var(--current-text-secondary);
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 1em;
+}
+
+.markdownPreview img {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdownPreview table {
+  border-collapse: collapse;
+  margin-bottom: 1em;
+  width: auto;
+}
+.markdownPreview th, .markdownPreview td {
+  border: 1px solid var(--current-border-color);
+  padding: 0.5em 0.75em;
+}
+.markdownPreview th {
+  background-color: var(--current-bg-secondary);
+  font-weight: bold;
+}
+
+.message {
+  padding: 20px;
+  text-align: center;
+  font-size: 1.2em;
+  color: var(--current-text-secondary);
+}
+.message.error {
+  color: #e57373; /* Un color de error */
+}

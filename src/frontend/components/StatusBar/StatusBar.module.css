@@ -1,0 +1,31 @@
+/* src/components/StatusBar/StatusBar.module.css */
+.statusBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 15px; /* Más compacto que el toolbar superior */
+  background-color: var(--accent-primary); /* Similar al de VS Code */
+  color: white; /* Texto blanco sobre fondo de acento */
+  font-size: 0.8em;
+  flex-shrink: 0; /* Evita que la barra de estado se encoja */
+  min-height: 22px;
+  border-top: 1px solid var(--current-border-color); /* O un color que contraste con el acento */
+}
+
+.statusSection {
+  display: flex;
+  align-items: center;
+}
+
+.statusSection span {
+  margin-right: 10px;
+}
+.statusSection span:last-child {
+  margin-right: 0;
+}
+
+.separator {
+  margin-left: 5px;
+  margin-right: 15px !important; /* Un poco más de espacio para el separador */
+  opacity: 0.7;
+}

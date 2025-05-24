@@ -1,0 +1,151 @@
+.sidebar {
+  width: 280px; /* Ancho de la barra lateral */
+  min-width: 220px;
+  background-color: var(--current-bg-secondary);
+  color: var(--current-text-primary);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--current-border-color);
+  overflow-y: auto; /* Permitir scroll si hay muchos archivos */
+  padding: 10px 0;
+}
+
+.sidebarHeader {
+  padding: 10px 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--current-border-color);
+  margin-bottom: 10px;
+}
+
+.headerTitle {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.actionButton {
+  background: none;
+  border: none;
+  color: var(--current-text-secondary);
+  cursor: pointer;
+  padding: 5px;
+  font-size: 1.1em;
+  border-radius: 4px;
+}
+
+.actionButton:hover {
+  color: var(--current-text-primary);
+  background-color: var(--current-bg-tertiary);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  margin-bottom: 10px;
+  background-color: var(--current-bg-primary); /* Un poco más oscuro que el secundario */
+  border-radius: 5px;
+  border: 1px solid var(--current-border-color);
+}
+
+.searchIcon {
+  color: var(--current-text-secondary);
+  margin-right: 8px;
+}
+
+.searchInput {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--current-text-primary);
+  padding: 8px 0;
+  font-size: 0.9em;
+}
+.searchInput:focus {
+  outline: none;
+}
+.searchInput::placeholder {
+  color: var(--current-text-secondary);
+}
+
+.tabs {
+  display: flex;
+  padding: 0 10px;
+  margin-bottom: 10px;
+}
+
+.tabButton {
+  flex-grow: 1;
+  background: none;
+  border: none;
+  color: var(--current-text-secondary);
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 0.9em;
+  text-align: center;
+  border-bottom: 2px solid transparent;
+}
+
+.tabButton.active {
+  color: var(--current-text-primary);
+  border-bottom: 2px solid var(--accent-primary);
+  font-weight: 500;
+}
+
+.tabButton:hover:not(.active) {
+  color: var(--current-text-primary);
+}
+
+.fileList {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px; /* Aumentar padding izquierdo para indentación */
+  cursor: pointer;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+  margin: 2px 10px; /* Margen horizontal para que no toque los bordes */
+}
+
+.fileItem:hover {
+  background-color: var(--current-bg-tertiary);
+}
+
+.fileItem.activeItem {
+  background-color: var(--accent-primary);
+  color: white;
+}
+.fileItem.activeItem:hover {
+  background-color: var(--accent-secondary);
+}
+
+.fileItem svg { /* Para iconos SVG */
+  margin-right: 8px;
+  font-size: 1em; /* Ajustar tamaño del icono */
+  flex-shrink: 0; /* Evitar que el icono se encoja */
+}
+
+.itemName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emptyMessage {
+  padding: 15px 20px;
+  color: var(--current-text-secondary);
+  font-style: italic;
+  font-size: 0.9em;
+  text-align: center;
+}
+.emptyMessage svg {
+  vertical-align: middle;
+  margin: 0 2px;
+}

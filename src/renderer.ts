@@ -26,8 +26,10 @@
  * ```
  */
 
-import './index.css';
+import './frontend/index.css';
 
-import './App.tsx';
+import './frontend/main';
+
+//import './app';
 
 console.log('👋 This message is being logged by "renderer.ts", included via Vite');

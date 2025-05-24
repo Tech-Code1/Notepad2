@@ -1,0 +1,12 @@
+.layout {
+  display: flex;
+  height: 100vh; /* Ocupa toda la altura de la ventana */
+  background-color: var(--current-bg-primary); /* Usa la variable de color */
+}
+
+.mainContent {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Evita que el contenido principal cause scroll en el layout */
+}
