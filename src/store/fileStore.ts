@@ -38,26 +38,12 @@ interface FileStoreState {
   saveCurrentFile: () => Promise<void>;
   saveFileAs: () => Promise<void>; // Para guardar un archivo nuevo o uno existente con otro nombre
   fetchFileSystemTree: (basePath?: string | null) => Promise<void>;
-  createNewFile: (parentPath: string | null) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
-  createNewNotebook: (parentProjectRoot: string, defaultName?: string) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
+  createNewFile: (notebookPath?: string) => Promise<{ path: string | null; name: string }>; // Modificado para devolver info
   deleteFile: (filePath: string) => Promise<void>; // Nueva acción útil
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
   setActiveNotebookPath: (path: string | null) => void;
-
-  // Selectors / Getters
-  getNotebooks: () => FileSystemItem[];
-  getPagesForNotebook: (notebookPath: string | null) => FileSystemItem[];
-  getLoosePages: () => FileSystemItem[];
-
-  setupDefaultProject: () => Promise<void>; // NEW FUNCTION
 }
-
-// Placeholder for path separator - ideally, this would be fetched and stored
-// For now, we'll assume paths are normalized or use a common separator like '/'
-// In a real scenario, this should be `await window.electronAPI.pathSeparator()`
-// and potentially stored in the state.
-const SEPARATOR = '/'; // TEMPORARY: Assume '/' for logic. This needs to be dynamic.
 
 const useFileStore = create<FileStoreState>((set, get) => ({
   sidebarOpen: true,
@@ -161,81 +147,29 @@ const useFileStore = create<FileStoreState>((set, get) => ({
   },
 
   saveFileAs: async () => {
-    const { currentFilePath: tempCurrentFilePath, currentFileContent, activeNotebookPath, projectRootPath } = get();
-    set({ isLoading: true, error: null }); // Clear previous errors
-
+    const { currentFileContent, projectRootPath } = get();
+    set({ isLoading: true });
     try {
-      const separator = await window.electronAPI.pathSeparator();
-      let defaultSavePath: string | null = null;
-      const unsavedPrefix = "unsaved-";
-
-      if (tempCurrentFilePath && tempCurrentFilePath.startsWith(unsavedPrefix)) {
-        // It's a new, unsaved file
-        let suggestedName = tempCurrentFilePath.substring(unsavedPrefix.length);
-        
-        // Clean up the suggestedName: if it contains a path, take only the filename part
-        // e.g., unsaved-notebookPath/actualFile.md -> actualFile.md
-        if (suggestedName.includes(separator)) {
-            // Check if the temp path was structured like unsaved-${activeNotebookPath}/filename
-            // If so, the part after unsaved- is activeNotebookPath/filename
-            // We just want filename
-            const potentialNotebookInPath = activeNotebookPath ? `${activeNotebookPath}${separator}` : null;
-            if (potentialNotebookInPath && suggestedName.startsWith(potentialNotebookInPath)) {
-                 suggestedName = suggestedName.substring(potentialNotebookInPath.length);
-            } else {
-                 suggestedName = suggestedName.substring(suggestedName.lastIndexOf(separator) + 1);
-            }
-        }
-
-
-        if (activeNotebookPath) {
-          // If current temp file was structured like unsaved-notebookPath/filename,
-          // it implies it belongs to that notebook.
-          // The tempCurrentFilePath for a page created IN a notebook is `unsaved-${activeNotebookPath}${SEPARATOR}new-page-${timestamp}.md`
-          // So, if tempCurrentFilePath.substring(unsavedPrefix.length) starts with activeNotebookPath, it's a match.
-          const pathAfterUnsaved = tempCurrentFilePath.substring(unsavedPrefix.length);
-          if (pathAfterUnsaved.startsWith(activeNotebookPath + separator)) {
-            defaultSavePath = activeNotebookPath + separator + suggestedName;
-          }
-        }
-        
-        if (!defaultSavePath && projectRootPath) {
-          defaultSavePath = projectRootPath + separator + suggestedName;
-        }
-        
-        if (!defaultSavePath) {
-          defaultSavePath = suggestedName;
-        }
-
-      } else if (tempCurrentFilePath) {
-        // It's an existing file, default to its current path
-        defaultSavePath = tempCurrentFilePath;
-      }
-      // If defaultSavePath is still null (e.g. currentFilePath was null), 
-      // the saveFile API (or dialog) should handle it, perhaps by opening in a default directory.
-      // Forcing a null here if defaultSavePath is not set ensures "Save As" dialog if main process expects null for it.
-      // However, the instruction is to try passing defaultSavePath to saveFile.
-
-      const result = await window.electronAPI.saveFile(defaultSavePath, currentFileContent, true); // Assuming third param `true` enables "suggest path" mode for Save As
-
+      // `saveFile(null, ...)` en tu API de Electron debería abrir el diálogo "Guardar como"
+      const result = await window.electronAPI.saveFile(null, currentFileContent);
       if (result.success && result.path) {
-        const parentDir = result.path.substring(0, result.path.lastIndexOf(separator));
         set({
           currentFilePath: result.path,
           originalFileContent: currentFileContent,
           isDirty: false,
           isLoading: false,
           error: null,
-          activeNotebookPath: parentDir,
+          activeNotebookPath: result.path.substring(0, result.path.lastIndexOf(await window.electronAPI.pathSeparator())),
         });
+        // Actualizar el árbol de archivos ya que se creó/movió un archivo
         if (projectRootPath) {
           await get().fetchFileSystemTree(projectRootPath);
         }
       } else {
-        // Handle cancellation or non-success without specific error
-        if (!result.error && !result.path) {
-          set({ isLoading: false }); // User cancelled
-          return; // Important to return here to not throw an error below
+        // Si el usuario cancela el diálogo "Guardar como", result.success podría ser false sin error.
+        if(!result.error && !result.path) {
+            set({isLoading: false}); // Usuario canceló
+            return;
         }
         throw new Error(result.error || 'Error al guardar como.');
       }
@@ -284,34 +218,40 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     }
   },
 
-  createNewFile: async (parentPath: string | null) => { // MODIFIED: signature and logic
-    const timestamp = Date.now();
-    const defaultPageName = `new-page-${timestamp}.md`;
-    let tempIdForNewNote: string;
-
-    if (parentPath) {
-      // Ensure parentPath does not end with a separator before appending another
-      const cleanParentPath = parentPath.endsWith(SEPARATOR) ? parentPath.slice(0, -1) : parentPath;
-      tempIdForNewNote = `unsaved-${cleanParentPath}${SEPARATOR}${defaultPageName}`;
-    } else {
-      tempIdForNewNote = `unsaved-${defaultPageName}`;
-    }
+  createNewFile: async (notebookPath?: string) => { // notebookPath es opcional
+    const tempIdForNewNote = `unsaved-note-${Date.now()}`; // Un ID temporal
+    // Lógica para crear un nuevo archivo
+    // 1. Generar un nombre de archivo único por defecto (ej. "Nota sin título 1.md")
+    // 2. Determinar la ruta donde se crearía (si notebookPath se provee, o en el projectRootPath)
+    // 3. Establecer el estado para un nuevo archivo sin guardar
     
-    const defaultDisplayName = "Nueva Página";
+    const defaultFileName = `Nota sin título ${Date.now()}.md`; // Ejemplo de nombre único
+    let newFilePathAttempt: string | null = null;
+    const root = notebookPath || get().projectRootPath;
+
+    if (root) {
+      // Aquí no creamos el archivo en el sistema de archivos aún, solo preparamos el estado.
+      // El archivo se creará físicamente cuando el usuario haga "Guardar" o "Guardar como".
+      // `currentFilePath` será `null` para indicar que es un archivo nuevo sin ruta física.
+      // O, podrías asignar una ruta temporal/placeholder si tu lógica lo requiere.
+      newFilePathAttempt = `${root}${window.electronAPI.pathSeparator()}${defaultFileName}`; // Ruta tentativa
+    }
 
     set({
-      currentFilePath: tempIdForNewNote,
-      currentFileContent: `# ${defaultDisplayName}\n\n`,
-      originalFileContent: '', // New file has no original content on disk
-      isDirty: true,         // It's new and unsaved
+      currentFilePath: tempIdForNewNote, // ¡Importante! Un archivo nuevo no tiene path hasta que se guarda.
+      currentFileContent: `# Nueva Nota\n\n`,
+      originalFileContent: '', // Es nuevo
+      isDirty: true, // Es nuevo y no guardado
       isLoading: false,
       error: null,
-      activeNotebookPath: parentPath, // Set active notebook to the parent path
+      activeNotebookPath: notebookPath || null, // Si se crea dentro de un notbook
     });
 
-    // The returned path is the temporary ID.
-    // The name is a generic display name.
-    return { path: tempIdForNewNote, name: defaultDisplayName };
+    // Devolvemos un path nulo porque el archivo no existe físicamente aún.
+    // El nombre es útil para la navegación si se usa como parte del ID.
+    // La navegación debería ir a una ruta genérica de "nueva nota" o usar un ID temporal
+    // hasta que se guarde y tenga un path real.
+    return { path: null, name: "Nueva Nota" }; // O el nombre por defecto que generes
   },
 
   deleteFile: async (filePath: string) => {
@@ -337,176 +277,6 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     } catch (err: any) {
       set({ error: `Error al borrar ${filePath}: ${err.message}`, isLoading: false });
     }
-  },
-
-  // Selectors / Getters
-  getNotebooks: () => {
-    const { fileSystemTree, projectRootPath } = get();
-    if (!projectRootPath) return [];
-
-    // Ensure projectRootPath ends with a separator for accurate startsWith checks
-    const normalizedProjectRootPath = projectRootPath.endsWith(SEPARATOR) ? projectRootPath : projectRootPath + SEPARATOR;
-
-    return fileSystemTree.filter(item => {
-      if (item.type !== 'directory') return false;
-      // Check if the item path starts with the project root path
-      if (!item.path.startsWith(normalizedProjectRootPath)) return false;
-      // Check if it's a direct child: no more separators after the projectRootPath part
-      const relativePath = item.path.substring(normalizedProjectRootPath.length);
-      return !relativePath.includes(SEPARATOR);
-    });
-  },
-
-  getPagesForNotebook: (notebookPath: string | null) => {
-    const { fileSystemTree } = get();
-    if (!notebookPath) return [];
-
-    // Ensure notebookPath ends with a separator for accurate startsWith checks
-    const normalizedNotebookPath = notebookPath.endsWith(SEPARATOR) ? notebookPath : notebookPath + SEPARATOR;
-
-    return fileSystemTree.filter(item => {
-      if (item.type !== 'file') return false;
-      // Check if the item path starts with the notebook path
-      if (!item.path.startsWith(normalizedNotebookPath)) return false;
-      // Check if it's a direct child: no more separators after the notebookPath part
-      const relativePath = item.path.substring(normalizedNotebookPath.length);
-      return !relativePath.includes(SEPARATOR);
-    });
-  },
-
-  getLoosePages: () => {
-    const { fileSystemTree, projectRootPath } = get();
-    if (!projectRootPath) return [];
-    
-    // Ensure projectRootPath ends with a separator for accurate startsWith checks
-    const normalizedProjectRootPath = projectRootPath.endsWith(SEPARATOR) ? projectRootPath : projectRootPath + SEPARATOR;
-
-    return fileSystemTree.filter(item => {
-      if (item.type !== 'file') return false;
-      // Check if the item path starts with the project root path
-      if (!item.path.startsWith(normalizedProjectRootPath)) return false;
-      // Check if it's a direct child: no more separators after the projectRootPath part
-      const relativePath = item.path.substring(normalizedProjectRootPath.length);
-      return !relativePath.includes(SEPARATOR);
-    });
-  },
-
-  createNewNotebook: async (parentProjectRoot: string, defaultName?: string) => { // MODIFIED SIGNATURE
-    if (!parentProjectRoot) {
-      console.error("createNewNotebook: parentProjectRoot is required.");
-      // Or set an error state: set({ error: "Project root not defined.", isLoading: false });
-      return { path: null, name: '' };
-    }
-
-    try {
-      let notebookName: string | null;
-
-      if (defaultName && defaultName.trim() !== "") {
-        notebookName = defaultName.trim();
-      } else {
-        notebookName = await window.electronAPI.promptForInput("Nombre del nuevo Notebook:", "Mi Notebook");
-      }
-
-      if (!notebookName) { // Handles cancellation from prompt or empty defaultName initially
-        return { path: null, name: '' };
-      }
-
-      // Sanitize after name is determined
-      const sanitizedNotebookName = notebookName.replace(/[\/\:*?"<>|]/g, '_').trim();
-
-      if (!sanitizedNotebookName) { // Handles case where sanitization makes it empty
-        console.warn(`Provided notebook name "${notebookName}" sanitized to an empty string.`);
-        // UI should ideally show an error to the user here if it was from prompt.
-        // If it was a bad defaultName, this failure is appropriate.
-        set({ error: "Nombre de notebook inválido o vacío después de la sanitización.", isLoading: false });
-        return { path: null, name: '' };
-      }
-
-      // Proceed with sanitizedNotebookName
-      const separator = await window.electronAPI.pathSeparator();
-      const fullNotebookPath = `${parentProjectRoot}${separator}${sanitizedNotebookName}`;
-
-      set({ isLoading: true, error: null });
-
-      const result = await window.electronAPI.createDirectory(fullNotebookPath);
-
-      if (!result.success || !result.path) {
-        set({ error: result.error || 'No se pudo crear el notebook.', isLoading: false });
-        return { path: null, name: '' };
-      }
-
-      // Success
-      await get().fetchFileSystemTree(get().projectRootPath); // Refresh file tree
-      set({ 
-        activeNotebookPath: result.path, 
-        isLoading: false 
-      });
-      return { path: result.path, name: sanitizedNotebookName };
-
-    } catch (err: any) {
-      console.error('Error creating new notebook:', err);
-      set({ error: `Error creando notebook: ${err.message}`, isLoading: false });
-      return { path: null, name: '' };
-    }
-  },
-
-  setupDefaultProject: async () => {
-    set({ isLoading: true, error: null });
-    let currentProjectRoot = get().projectRootPath;
-
-    // 1. Handle projectRootPath
-    if (!currentProjectRoot) {
-      console.log("Project root not set. Prompting user to select a folder.");
-      await get().fetchFileSystemTree(null); // This prompts for folder selection
-      currentProjectRoot = get().projectRootPath;
-
-      if (!currentProjectRoot) {
-        console.log("User cancelled folder selection. Aborting default project setup.");
-        set({ isLoading: false }); // Reset loading state
-        return;
-      }
-    }
-    
-    // Safeguard (should be set by now if it was null initially)
-    if (!currentProjectRoot) {
-      console.error("Project root path is not set after attempting selection. Aborting.");
-      set({ error: "No se pudo establecer la carpeta del proyecto.", isLoading: false });
-      return;
-    }
-
-    // 2. Create Default Notebook
-    console.log(`Creating default notebook in: ${currentProjectRoot}`);
-    const notebookResult = await get().createNewNotebook(currentProjectRoot, "Mi Primer Notebook");
-
-    if (!notebookResult.path) {
-      console.error("Failed to create the default notebook. Error (if any) might be in store state.", notebookResult.name);
-      // createNewNotebook already sets error state and isLoading: false if it fails internally after prompt.
-      // If it failed due to bad defaultName, error would be set.
-      // If user cancelled prompt (if defaultName failed), createNewNotebook returns {path: null, name: ''} and doesn't set store error.
-      if (!get().error) { // Only set error if createNewNotebook didn't (e.g. user cancel)
-         set({ error: "No se pudo crear el cuaderno por defecto (posiblemente cancelado).", isLoading: false });
-      }
-      return;
-    }
-    console.log(`Default notebook created: ${notebookResult.path}`);
-
-    // 3. Create Default Page
-    const newNotebookPath = notebookResult.path;
-    console.log(`Creating default page in: ${newNotebookPath}`);
-    const pageResult = await get().createNewFile(newNotebookPath); // This sets currentFilePath, activeNotebookPath, etc.
-
-    if (!pageResult.path) {
-        // This case is less likely given createNewFile's current structure (it always returns a path)
-        // but good for robustness.
-        console.error("Failed to create the default page. This is unexpected.");
-        set({ error: "No se pudo crear la página por defecto.", isLoading: false });
-        return;
-    }
-    console.log(`Default page created (temp path): ${pageResult.path}`);
-    
-    set({ isLoading: false });
-    console.log("Default project setup complete.");
-    // At this point, activeNotebookPath is newNotebookPath, currentFilePath is the new page's temp path.
   },
 
 }));

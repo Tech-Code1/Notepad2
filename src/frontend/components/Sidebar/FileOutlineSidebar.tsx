@@ -1,15 +1,25 @@
 import React, { useState } from 'react';
 import { FaChevronDown, FaChevronRight, FaPlus, FaSearch, FaCog, FaHome } from 'react-icons/fa';
-import { NavLink } from 'react-router-dom';
-import useFileStore from '@/store/fileStore';
-import type { FileSystemItem } from '@/store/fileStore'; // Import type for clarity
+import { NavLink, useNavigate } from 'react-router-dom';
+import useFileStore from '@/store/fileStore'; // Para obtener el título del archivo actual, etc.
+
+// Placeholder data - Deberías obtener esto de tu estado global (ej. fileStore)
+const notebooksData = [
+  { id: 'nb1', name: 'Notebook 1', pages: [{id: 'p1-1', name: 'Página 1.1'}, {id: 'p1-2', name: 'Página 1.2'}] },
+  { id: 'nb2', name: 'Notebook 2', pages: [{id: 'p2-1', name: 'Página 2.1'}] },
+];
+
+const pagesData = [
+  { id: 'pg1', name: 'Página 1' },
+  { id: 'pg2', name: 'Página 2' },
+];
 
 interface CollapsibleSectionProps {
   title: string;
-  items: { id: string; name: string }[]; // id is now path
+  items: { id: string; name: string }[];
   onAddItem: () => void;
-  onItemClick: (path: string, type: 'notebook' | 'page') => void;
-  activeItemId?: string | null; // path of the active item
+  onItemClick: (id: string, type: 'notebook' | 'page') => void;
+  activeItemId?: string | null;
 }
 
 const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, items, onAddItem, onItemClick, activeItemId }) => {
@@ -22,7 +32,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, items, o
           {isOpen ? <FaChevronDown size="0.8em"/> : <FaChevronRight size="0.8em"/>}
           <span>{title}</span>
         </button>
-        <button onClick={onAddItem} className="p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white" title={`Crear ${title === 'Notbooks' ? 'notbook nuevo' : 'página nueva'}`}>
+        <button onClick={onAddItem} className="p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white">
           <FaPlus size="0.9em"/>
         </button>
       </div>
@@ -37,7 +47,6 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, items, o
                     ? 'bg-gray-600 text-white' // Active item
                     : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }`}
-                title={item.name}
               >
                 {item.name}
               </button>
@@ -52,87 +61,41 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ title, items, o
 
 
 const FileOutlineSidebar: React.FC = () => {
+  const { currentFilePath, currentFileContent } = useFileStore(); // Asumiendo que tienes algo así para el título
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'archivo' | 'esquema'>('archivo');
+  const [activeNotebookId, setActiveNotebookId] = useState<string | null>(null);
+  const [activePageId, setActivePageId] = useState<string | null>(null);
+  const { projectRootPath } = useFileStore();
 
-  // Selectors from useFileStore
-  const projectRootPath = useFileStore(state => state.projectRootPath);
-  const notebooks = useFileStore(state => state.getNotebooks().map(nb => ({ id: nb.path, name: nb.name })));
-  const activeNotebookPath = useFileStore(state => state.activeNotebookPath);
-  const currentFilePath = useFileStore(state => state.currentFilePath);
-  
-  const pagesForNotebook = useFileStore(state => 
-    state.activeNotebookPath 
-      ? state.getPagesForNotebook(state.activeNotebookPath).map(p => ({ id: p.path, name: p.name }))
-      : []
-  );
-  const loosePages = useFileStore(state => state.getLoosePages().map(p => ({ id: p.path, name: p.name })));
+  // Determinar el título del archivo actual
+  // Esto es una simplificación, necesitarías una lógica más robusta
+  const currentFileName = currentFilePath ? currentFilePath.split(/[\\/]/).pop()?.replace(/\.[^/.]+$/, "") : "Sin título";
 
-  const setActiveNotebookPath = useFileStore(state => state.setActiveNotebookPath);
-  const openFile = useFileStore(state => state.openFile);
-  const createNewFile = useFileStore(state => state.createNewFile);
-  const createNewNotebook = useFileStore(state => state.createNewNotebook); // Added createNewNotebook
 
-  // Determine which pages to display
-  const displayedPages = activeNotebookPath ? pagesForNotebook : loosePages;
-
-  // Clean current file name for display
-  const currentFileNameForDisplay = currentFilePath
-    ? currentFilePath.substring(currentFilePath.lastIndexOf(currentFilePath.includes('/') ? '/' : '\\') + 1).replace(/\.[^/.]+$/, "") 
-    : "Sin título";
-
-  const handleItemClick = (path: string, type: 'notebook' | 'page') => {
+  const handleItemClick = (id: string, type: 'notebook' | 'page') => {
     if (type === 'notebook') {
-      // If the same notebook is clicked, deselect it to show loose pages
-      if (activeNotebookPath === path) {
-        setActiveNotebookPath(null);
-      } else {
-        setActiveNotebookPath(path);
-      }
-    } else { // type === 'page'
-      openFile(path);
+      setActiveNotebookId(id);
+      setActivePageId(null); // Deseleccionar página si se selecciona un notebook
+      // Aquí podrías navegar o cargar el contenido del notebook
+      console.log(`Notebook ${id} clicked`);
+    } else {
+      setActivePageId(id);
+      setActiveNotebookId(null); // Deseleccionar notebook si se selecciona una página
+      // Navegar a la página/nota
+      navigate(`/note/${encodeURIComponent(id)}`); // Asumiendo que 'id' es el noteId
     }
   };
-  
-  const handleAddNewNotebook = async () => { // Modified to be async and use createNewNotebook
-    if (!projectRootPath) {
-      console.error("Cannot create notebook: Project root path is not set.");
-      // TODO: Optionally, show a user-facing error message here
-      return;
-    }
-
-    try {
-      const result = await createNewNotebook(projectRootPath);
-      if (result.path) {
-        console.log(`Notebook "${result.name}" created at ${result.path}`);
-        // Optional: Add any UI feedback, like a notification
-      } else {
-        console.log("Notebook creation was cancelled or failed (e.g., empty name, user cancellation, or sanitization failure).");
-        // Optional: User feedback if name was invalid or creation failed silently
-      }
-    } catch (error) {
-      console.error("Error creating notebook:", error);
-      // Optional: Show a user-facing error message
-    }
-  };
-
-  const handleAddNewPage = async () => {
-    // If a notebook is active, create the page inside it.
-    // Otherwise, create a loose page (projectRootPath will be used by createNewFile).
-    await createNewFile(activeNotebookPath); 
-    // After creation, the new file (with a temp ID) should be set as currentFilePath,
-    // and openFile should be implicitly called or routing handled.
-    // The store's createNewFile sets currentFilePath to a temp ID and isDirty=true.
-  };
-
 
   return (
     <aside className="w-72 min-w-[240px] bg-[#252526] text-gray-300 flex flex-col border-r border-gray-700">
+      {/* Botón Home y Título del archivo actual */}
       <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h3 className="text-md font-medium text-white truncate flex-grow" title={currentFileNameForDisplay}>
-          {currentFileNameForDisplay || "Sin título"}
+        <h3 className="text-md font-medium text-white truncate flex-grow" title={currentFileName}>
+          {currentFileName || "Sin título"}
         </h3>
         <NavLink
-          to={projectRootPath ? "/all-notes" : "/"}
+          to={projectRootPath ? "/all-notes" : "/"} // Si no hay proyecto, quizás a una landing o selector
           title="Ir a Todas las Notas"
           className="p-1.5 rounded hover:bg-gray-600 text-gray-400 hover:text-white ml-2 flex-shrink-0"
         >
@@ -140,6 +103,7 @@ const FileOutlineSidebar: React.FC = () => {
         </NavLink>
       </div>
 
+      {/* Tabs Archivo/Esquema y Búsqueda */}
       <div className="px-3 py-2 border-b border-gray-700">
         <div className="flex items-center space-x-2 mb-2">
           <button
@@ -156,30 +120,34 @@ const FileOutlineSidebar: React.FC = () => {
           >
             Esquema
           </button>
-          <div className="flex-grow" />
-          <button className="p-2 rounded hover:bg-gray-600 text-gray-400 hover:text-white" title="Buscar (funcionalidad pendiente)">
+          <div className="flex-grow" /> {/* Spacer */}
+          <button className="p-2 rounded hover:bg-gray-600 text-gray-400 hover:text-white">
             <FaSearch size="1em"/>
           </button>
         </div>
+        {/* Aquí iría la barra de búsqueda si la quieres bajo los tabs */}
+        {/* <input type="text" placeholder="Buscar en archivo..." className="w-full bg-gray-800 border border-gray-700 rounded py-1 px-2 text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:border-blue-500" /> */}
       </div>
 
+      {/* Contenido de Tabs */}
       <div className="flex-grow overflow-y-auto p-1">
         {activeTab === 'archivo' && (
           <>
             <CollapsibleSection
               title="Notbooks"
-              items={notebooks}
-              onAddItem={handleAddNewNotebook}
-              onItemClick={handleItemClick}
-              activeItemId={activeNotebookPath}
+              items={notebooksData} // Reemplazar con datos reales de tu store
+              onAddItem={() => console.log('Add Notebook')}
+              onItemClick={(id) => handleItemClick(id, 'notebook')}
+              activeItemId={activeNotebookId}
             />
             <CollapsibleSection
               title="Páginas"
-              items={displayedPages}
-              onAddItem={handleAddNewPage}
-              onItemClick={handleItemClick}
-              activeItemId={currentFilePath} // A page is active if it's the currentFilePath
+              items={pagesData} // Reemplazar con datos reales de tu store
+              onAddItem={() => console.log('Add Page')}
+              onItemClick={(id) => handleItemClick(id, 'page')}
+              activeItemId={activePageId}
             />
+            {/* Otros elementos de la pestaña "Archivo" */}
           </>
         )}
         {activeTab === 'esquema' && (
@@ -189,6 +157,7 @@ const FileOutlineSidebar: React.FC = () => {
         )}
       </div>
 
+      {/* Settings en la parte inferior */}
       <div className="p-3 border-t border-gray-700">
         <NavLink
           to="/settings"
