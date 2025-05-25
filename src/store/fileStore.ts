@@ -39,6 +39,7 @@ interface FileStoreState {
   saveFileAs: () => Promise<void>; // Para guardar un archivo nuevo o uno existente con otro nombre
   fetchFileSystemTree: (basePath?: string | null) => Promise<void>;
   createNewFile: (parentPath: string | null) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
+  createNewNotebook: (parentProjectRoot: string) => Promise<{ path: string | null; name: string }>; // NEW FUNCTION
   deleteFile: (filePath: string) => Promise<void>; // Nueva acción útil
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
@@ -334,6 +335,55 @@ const useFileStore = create<FileStoreState>((set, get) => ({
       const relativePath = item.path.substring(normalizedProjectRootPath.length);
       return !relativePath.includes(SEPARATOR);
     });
+  },
+
+  createNewNotebook: async (parentProjectRoot: string) => {
+    if (!parentProjectRoot) {
+      console.error("createNewNotebook: parentProjectRoot is required.");
+      // Or set an error state: set({ error: "Project root not defined.", isLoading: false });
+      return { path: null, name: '' };
+    }
+
+    try {
+      const notebookName = await window.electronAPI.promptForInput("Nombre del nuevo Notebook:", "Mi Notebook");
+
+      if (!notebookName || notebookName.trim() === '') {
+        // User cancelled or entered an empty name
+        return { path: null, name: '' };
+      }
+
+      const sanitizedNotebookName = notebookName.trim().replace(/[\/\:*?"<>|]/g, '_');
+
+      if (sanitizedNotebookName === '') {
+        set({ error: "Nombre de notebook inválido después de la sanitización.", isLoading: false });
+        return { path: null, name: '' };
+      }
+
+      const separator = await window.electronAPI.pathSeparator();
+      const fullNotebookPath = `${parentProjectRoot}${separator}${sanitizedNotebookName}`;
+
+      set({ isLoading: true, error: null });
+
+      const result = await window.electronAPI.createDirectory(fullNotebookPath);
+
+      if (!result.success || !result.path) {
+        set({ error: result.error || 'No se pudo crear el notebook.', isLoading: false });
+        return { path: null, name: '' };
+      }
+
+      // Success
+      await get().fetchFileSystemTree(get().projectRootPath); // Refresh file tree
+      set({ 
+        activeNotebookPath: result.path, 
+        isLoading: false 
+      });
+      return { path: result.path, name: sanitizedNotebookName };
+
+    } catch (err: any) {
+      console.error('Error creating new notebook:', err);
+      set({ error: `Error creando notebook: ${err.message}`, isLoading: false });
+      return { path: null, name: '' };
+    }
   },
 
 }));

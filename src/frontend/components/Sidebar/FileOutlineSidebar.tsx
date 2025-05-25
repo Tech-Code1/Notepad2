@@ -70,6 +70,7 @@ const FileOutlineSidebar: React.FC = () => {
   const setActiveNotebookPath = useFileStore(state => state.setActiveNotebookPath);
   const openFile = useFileStore(state => state.openFile);
   const createNewFile = useFileStore(state => state.createNewFile);
+  const createNewNotebook = useFileStore(state => state.createNewNotebook); // Added createNewNotebook
 
   // Determine which pages to display
   const displayedPages = activeNotebookPath ? pagesForNotebook : loosePages;
@@ -92,12 +93,26 @@ const FileOutlineSidebar: React.FC = () => {
     }
   };
   
-  const handleAddNewNotebook = () => {
-    // TODO: Implement createNewNotebook in fileStore.ts
-    // For now, it could create a page at the root or a folder.
-    // This functionality is not fully defined by current store actions.
-    console.log('Solicitud para crear nuevo Notbook (funcionalidad pendiente en store)');
-    // Potentially: await createNewFile(null, true); // Assuming createNewFile could handle folders
+  const handleAddNewNotebook = async () => { // Modified to be async and use createNewNotebook
+    if (!projectRootPath) {
+      console.error("Cannot create notebook: Project root path is not set.");
+      // TODO: Optionally, show a user-facing error message here
+      return;
+    }
+
+    try {
+      const result = await createNewNotebook(projectRootPath);
+      if (result.path) {
+        console.log(`Notebook "${result.name}" created at ${result.path}`);
+        // Optional: Add any UI feedback, like a notification
+      } else {
+        console.log("Notebook creation was cancelled or failed (e.g., empty name, user cancellation, or sanitization failure).");
+        // Optional: User feedback if name was invalid or creation failed silently
+      }
+    } catch (error) {
+      console.error("Error creating notebook:", error);
+      // Optional: Show a user-facing error message
+    }
   };
 
   const handleAddNewPage = async () => {
