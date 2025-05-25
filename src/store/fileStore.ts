@@ -159,29 +159,81 @@ const useFileStore = create<FileStoreState>((set, get) => ({
   },
 
   saveFileAs: async () => {
-    const { currentFileContent, projectRootPath } = get();
-    set({ isLoading: true });
+    const { currentFilePath: tempCurrentFilePath, currentFileContent, activeNotebookPath, projectRootPath } = get();
+    set({ isLoading: true, error: null }); // Clear previous errors
+
     try {
-      // `saveFile(null, ...)` en tu API de Electron debería abrir el diálogo "Guardar como"
-      const result = await window.electronAPI.saveFile(null, currentFileContent);
+      const separator = await window.electronAPI.pathSeparator();
+      let defaultSavePath: string | null = null;
+      const unsavedPrefix = "unsaved-";
+
+      if (tempCurrentFilePath && tempCurrentFilePath.startsWith(unsavedPrefix)) {
+        // It's a new, unsaved file
+        let suggestedName = tempCurrentFilePath.substring(unsavedPrefix.length);
+        
+        // Clean up the suggestedName: if it contains a path, take only the filename part
+        // e.g., unsaved-notebookPath/actualFile.md -> actualFile.md
+        if (suggestedName.includes(separator)) {
+            // Check if the temp path was structured like unsaved-${activeNotebookPath}/filename
+            // If so, the part after unsaved- is activeNotebookPath/filename
+            // We just want filename
+            const potentialNotebookInPath = activeNotebookPath ? `${activeNotebookPath}${separator}` : null;
+            if (potentialNotebookInPath && suggestedName.startsWith(potentialNotebookInPath)) {
+                 suggestedName = suggestedName.substring(potentialNotebookInPath.length);
+            } else {
+                 suggestedName = suggestedName.substring(suggestedName.lastIndexOf(separator) + 1);
+            }
+        }
+
+
+        if (activeNotebookPath) {
+          // If current temp file was structured like unsaved-notebookPath/filename,
+          // it implies it belongs to that notebook.
+          // The tempCurrentFilePath for a page created IN a notebook is `unsaved-${activeNotebookPath}${SEPARATOR}new-page-${timestamp}.md`
+          // So, if tempCurrentFilePath.substring(unsavedPrefix.length) starts with activeNotebookPath, it's a match.
+          const pathAfterUnsaved = tempCurrentFilePath.substring(unsavedPrefix.length);
+          if (pathAfterUnsaved.startsWith(activeNotebookPath + separator)) {
+            defaultSavePath = activeNotebookPath + separator + suggestedName;
+          }
+        }
+        
+        if (!defaultSavePath && projectRootPath) {
+          defaultSavePath = projectRootPath + separator + suggestedName;
+        }
+        
+        if (!defaultSavePath) {
+          defaultSavePath = suggestedName;
+        }
+
+      } else if (tempCurrentFilePath) {
+        // It's an existing file, default to its current path
+        defaultSavePath = tempCurrentFilePath;
+      }
+      // If defaultSavePath is still null (e.g. currentFilePath was null), 
+      // the saveFile API (or dialog) should handle it, perhaps by opening in a default directory.
+      // Forcing a null here if defaultSavePath is not set ensures "Save As" dialog if main process expects null for it.
+      // However, the instruction is to try passing defaultSavePath to saveFile.
+
+      const result = await window.electronAPI.saveFile(defaultSavePath, currentFileContent, true); // Assuming third param `true` enables "suggest path" mode for Save As
+
       if (result.success && result.path) {
+        const parentDir = result.path.substring(0, result.path.lastIndexOf(separator));
         set({
           currentFilePath: result.path,
           originalFileContent: currentFileContent,
           isDirty: false,
           isLoading: false,
           error: null,
-          activeNotebookPath: result.path.substring(0, result.path.lastIndexOf(await window.electronAPI.pathSeparator())),
+          activeNotebookPath: parentDir,
         });
-        // Actualizar el árbol de archivos ya que se creó/movió un archivo
         if (projectRootPath) {
           await get().fetchFileSystemTree(projectRootPath);
         }
       } else {
-        // Si el usuario cancela el diálogo "Guardar como", result.success podría ser false sin error.
-        if(!result.error && !result.path) {
-            set({isLoading: false}); // Usuario canceló
-            return;
+        // Handle cancellation or non-success without specific error
+        if (!result.error && !result.path) {
+          set({ isLoading: false }); // User cancelled
+          return; // Important to return here to not throw an error below
         }
         throw new Error(result.error || 'Error al guardar como.');
       }
