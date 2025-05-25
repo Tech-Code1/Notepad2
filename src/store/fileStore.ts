@@ -43,7 +43,18 @@ interface FileStoreState {
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
   setActiveNotebookPath: (path: string | null) => void;
+
+  // Selectors / Getters
+  getNotebooks: () => FileSystemItem[];
+  getPagesForNotebook: (notebookPath: string | null) => FileSystemItem[];
+  getLoosePages: () => FileSystemItem[];
 }
+
+// Placeholder for path separator - ideally, this would be fetched and stored
+// For now, we'll assume paths are normalized or use a common separator like '/'
+// In a real scenario, this should be `await window.electronAPI.pathSeparator()`
+// and potentially stored in the state.
+const SEPARATOR = '/'; // TEMPORARY: Assume '/' for logic. This needs to be dynamic.
 
 const useFileStore = create<FileStoreState>((set, get) => ({
   sidebarOpen: true,
@@ -277,6 +288,58 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     } catch (err: any) {
       set({ error: `Error al borrar ${filePath}: ${err.message}`, isLoading: false });
     }
+  },
+
+  // Selectors / Getters
+  getNotebooks: () => {
+    const { fileSystemTree, projectRootPath } = get();
+    if (!projectRootPath) return [];
+
+    // Ensure projectRootPath ends with a separator for accurate startsWith checks
+    const normalizedProjectRootPath = projectRootPath.endsWith(SEPARATOR) ? projectRootPath : projectRootPath + SEPARATOR;
+
+    return fileSystemTree.filter(item => {
+      if (item.type !== 'directory') return false;
+      // Check if the item path starts with the project root path
+      if (!item.path.startsWith(normalizedProjectRootPath)) return false;
+      // Check if it's a direct child: no more separators after the projectRootPath part
+      const relativePath = item.path.substring(normalizedProjectRootPath.length);
+      return !relativePath.includes(SEPARATOR);
+    });
+  },
+
+  getPagesForNotebook: (notebookPath: string | null) => {
+    const { fileSystemTree } = get();
+    if (!notebookPath) return [];
+
+    // Ensure notebookPath ends with a separator for accurate startsWith checks
+    const normalizedNotebookPath = notebookPath.endsWith(SEPARATOR) ? notebookPath : notebookPath + SEPARATOR;
+
+    return fileSystemTree.filter(item => {
+      if (item.type !== 'file') return false;
+      // Check if the item path starts with the notebook path
+      if (!item.path.startsWith(normalizedNotebookPath)) return false;
+      // Check if it's a direct child: no more separators after the notebookPath part
+      const relativePath = item.path.substring(normalizedNotebookPath.length);
+      return !relativePath.includes(SEPARATOR);
+    });
+  },
+
+  getLoosePages: () => {
+    const { fileSystemTree, projectRootPath } = get();
+    if (!projectRootPath) return [];
+    
+    // Ensure projectRootPath ends with a separator for accurate startsWith checks
+    const normalizedProjectRootPath = projectRootPath.endsWith(SEPARATOR) ? projectRootPath : projectRootPath + SEPARATOR;
+
+    return fileSystemTree.filter(item => {
+      if (item.type !== 'file') return false;
+      // Check if the item path starts with the project root path
+      if (!item.path.startsWith(normalizedProjectRootPath)) return false;
+      // Check if it's a direct child: no more separators after the projectRootPath part
+      const relativePath = item.path.substring(normalizedProjectRootPath.length);
+      return !relativePath.includes(SEPARATOR);
+    });
   },
 
 }));
