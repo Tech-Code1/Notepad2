@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaChevronDown, FaChevronRight, FaPlus, FaSearch, FaCog } from 'react-icons/fa';
+import { FaChevronDown, FaChevronRight, FaPlus, FaSearch, FaCog, FaHome } from 'react-icons/fa';
 import { NavLink, useNavigate } from 'react-router-dom';
 import useFileStore from '@/store/fileStore'; // Para obtener el título del archivo actual, etc.
 
@@ -66,6 +66,7 @@ const FileOutlineSidebar: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'archivo' | 'esquema'>('archivo');
   const [activeNotebookId, setActiveNotebookId] = useState<string | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
+  const { projectRootPath } = useFileStore();
 
   // Determinar el título del archivo actual
   // Esto es una simplificación, necesitarías una lógica más robusta
@@ -88,11 +89,18 @@ const FileOutlineSidebar: React.FC = () => {
 
   return (
     <aside className="w-72 min-w-[240px] bg-[#252526] text-gray-300 flex flex-col border-r border-gray-700">
-      {/* Título del archivo actual */}
-      <div className="px-4 py-3 border-b border-gray-700">
-        <h3 className="text-md font-medium text-white truncate" title={currentFileName}>
+      {/* Botón Home y Título del archivo actual */}
+      <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h3 className="text-md font-medium text-white truncate flex-grow" title={currentFileName}>
           {currentFileName || "Sin título"}
         </h3>
+        <NavLink
+          to={projectRootPath ? "/all-notes" : "/"} // Si no hay proyecto, quizás a una landing o selector
+          title="Ir a Todas las Notas"
+          className="p-1.5 rounded hover:bg-gray-600 text-gray-400 hover:text-white ml-2 flex-shrink-0"
+        >
+          <FaHome size="1.1em"/>
+        </NavLink>
       </div>
 
       {/* Tabs Archivo/Esquema y Búsqueda */}

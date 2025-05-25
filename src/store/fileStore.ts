@@ -219,6 +219,7 @@ const useFileStore = create<FileStoreState>((set, get) => ({
   },
 
   createNewFile: async (notebookPath?: string) => { // notebookPath es opcional
+    const tempIdForNewNote = `unsaved-note-${Date.now()}`; // Un ID temporal
     // Lógica para crear un nuevo archivo
     // 1. Generar un nombre de archivo único por defecto (ej. "Nota sin título 1.md")
     // 2. Determinar la ruta donde se crearía (si notebookPath se provee, o en el projectRootPath)
@@ -237,7 +238,7 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     }
 
     set({
-      currentFilePath: null, // ¡Importante! Un archivo nuevo no tiene path hasta que se guarda.
+      currentFilePath: tempIdForNewNote, // ¡Importante! Un archivo nuevo no tiene path hasta que se guarda.
       currentFileContent: `# Nueva Nota\n\n`,
       originalFileContent: '', // Es nuevo
       isDirty: true, // Es nuevo y no guardado

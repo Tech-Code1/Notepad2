@@ -8,7 +8,7 @@ const AppLayout: FC = () => {
   const { currentFilePath } = useFileStore();
   const location = useLocation();
 
-  const showFileOutlineSidebar = currentFilePath || location.pathname.startsWith('/note/');
+  const showFileOutlineSidebar = currentFilePath !== null || location.pathname === '/note/new';
 
   return (
     <div className="flex h-screen bg-bg-primary text-text-primary">
