@@ -39,7 +39,7 @@ interface FileStoreState {
   saveFileAs: () => Promise<void>; // Para guardar un archivo nuevo o uno existente con otro nombre
   fetchFileSystemTree: (basePath?: string | null) => Promise<void>;
   createNewFile: (parentPath: string | null) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
-  createNewNotebook: (parentProjectRoot: string) => Promise<{ path: string | null; name: string }>; // NEW FUNCTION
+  createNewNotebook: (parentProjectRoot: string, defaultName?: string) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
   deleteFile: (filePath: string) => Promise<void>; // Nueva acción útil
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
@@ -49,6 +49,8 @@ interface FileStoreState {
   getNotebooks: () => FileSystemItem[];
   getPagesForNotebook: (notebookPath: string | null) => FileSystemItem[];
   getLoosePages: () => FileSystemItem[];
+
+  setupDefaultProject: () => Promise<void>; // NEW FUNCTION
 }
 
 // Placeholder for path separator - ideally, this would be fetched and stored
@@ -389,7 +391,7 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     });
   },
 
-  createNewNotebook: async (parentProjectRoot: string) => {
+  createNewNotebook: async (parentProjectRoot: string, defaultName?: string) => { // MODIFIED SIGNATURE
     if (!parentProjectRoot) {
       console.error("createNewNotebook: parentProjectRoot is required.");
       // Or set an error state: set({ error: "Project root not defined.", isLoading: false });
@@ -397,20 +399,30 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     }
 
     try {
-      const notebookName = await window.electronAPI.promptForInput("Nombre del nuevo Notebook:", "Mi Notebook");
+      let notebookName: string | null;
 
-      if (!notebookName || notebookName.trim() === '') {
-        // User cancelled or entered an empty name
+      if (defaultName && defaultName.trim() !== "") {
+        notebookName = defaultName.trim();
+      } else {
+        notebookName = await window.electronAPI.promptForInput("Nombre del nuevo Notebook:", "Mi Notebook");
+      }
+
+      if (!notebookName) { // Handles cancellation from prompt or empty defaultName initially
         return { path: null, name: '' };
       }
 
-      const sanitizedNotebookName = notebookName.trim().replace(/[\/\:*?"<>|]/g, '_');
+      // Sanitize after name is determined
+      const sanitizedNotebookName = notebookName.replace(/[\/\:*?"<>|]/g, '_').trim();
 
-      if (sanitizedNotebookName === '') {
-        set({ error: "Nombre de notebook inválido después de la sanitización.", isLoading: false });
+      if (!sanitizedNotebookName) { // Handles case where sanitization makes it empty
+        console.warn(`Provided notebook name "${notebookName}" sanitized to an empty string.`);
+        // UI should ideally show an error to the user here if it was from prompt.
+        // If it was a bad defaultName, this failure is appropriate.
+        set({ error: "Nombre de notebook inválido o vacío después de la sanitización.", isLoading: false });
         return { path: null, name: '' };
       }
 
+      // Proceed with sanitizedNotebookName
       const separator = await window.electronAPI.pathSeparator();
       const fullNotebookPath = `${parentProjectRoot}${separator}${sanitizedNotebookName}`;
 
@@ -436,6 +448,65 @@ const useFileStore = create<FileStoreState>((set, get) => ({
       set({ error: `Error creando notebook: ${err.message}`, isLoading: false });
       return { path: null, name: '' };
     }
+  },
+
+  setupDefaultProject: async () => {
+    set({ isLoading: true, error: null });
+    let currentProjectRoot = get().projectRootPath;
+
+    // 1. Handle projectRootPath
+    if (!currentProjectRoot) {
+      console.log("Project root not set. Prompting user to select a folder.");
+      await get().fetchFileSystemTree(null); // This prompts for folder selection
+      currentProjectRoot = get().projectRootPath;
+
+      if (!currentProjectRoot) {
+        console.log("User cancelled folder selection. Aborting default project setup.");
+        set({ isLoading: false }); // Reset loading state
+        return;
+      }
+    }
+    
+    // Safeguard (should be set by now if it was null initially)
+    if (!currentProjectRoot) {
+      console.error("Project root path is not set after attempting selection. Aborting.");
+      set({ error: "No se pudo establecer la carpeta del proyecto.", isLoading: false });
+      return;
+    }
+
+    // 2. Create Default Notebook
+    console.log(`Creating default notebook in: ${currentProjectRoot}`);
+    const notebookResult = await get().createNewNotebook(currentProjectRoot, "Mi Primer Notebook");
+
+    if (!notebookResult.path) {
+      console.error("Failed to create the default notebook. Error (if any) might be in store state.", notebookResult.name);
+      // createNewNotebook already sets error state and isLoading: false if it fails internally after prompt.
+      // If it failed due to bad defaultName, error would be set.
+      // If user cancelled prompt (if defaultName failed), createNewNotebook returns {path: null, name: ''} and doesn't set store error.
+      if (!get().error) { // Only set error if createNewNotebook didn't (e.g. user cancel)
+         set({ error: "No se pudo crear el cuaderno por defecto (posiblemente cancelado).", isLoading: false });
+      }
+      return;
+    }
+    console.log(`Default notebook created: ${notebookResult.path}`);
+
+    // 3. Create Default Page
+    const newNotebookPath = notebookResult.path;
+    console.log(`Creating default page in: ${newNotebookPath}`);
+    const pageResult = await get().createNewFile(newNotebookPath); // This sets currentFilePath, activeNotebookPath, etc.
+
+    if (!pageResult.path) {
+        // This case is less likely given createNewFile's current structure (it always returns a path)
+        // but good for robustness.
+        console.error("Failed to create the default page. This is unexpected.");
+        set({ error: "No se pudo crear la página por defecto.", isLoading: false });
+        return;
+    }
+    console.log(`Default page created (temp path): ${pageResult.path}`);
+    
+    set({ isLoading: false });
+    console.log("Default project setup complete.");
+    // At this point, activeNotebookPath is newNotebookPath, currentFilePath is the new page's temp path.
   },
 
 }));
