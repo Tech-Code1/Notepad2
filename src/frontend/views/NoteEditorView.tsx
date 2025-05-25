@@ -1,7 +1,78 @@
 // src/views/NoteEditorView.tsx
-import React, { useEffect, useState }from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useFileStore from '@/store/fileStore';
+import EditorJS, { OutputData } from '@editorjs/editorjs'; // Added EditorJS import
+import Header from '@editorjs/header'; // Added Header tool
+import List from '@editorjs/list'; // Added List tool
+import ImageTool from '@editorjs/image'; // Added Image tool (basic for now)
+
+/*
+  EXPECTED ELECTRON API for window.electronAPI.saveImage:
+  (To be implemented in preload.ts and main process)
+
+  Signature:
+  saveImage(fileData: { buffer: ArrayBuffer, name: string, type: string }): Promise<{ success: boolean; url?: string; error?: string; }>
+
+  Behavior:
+  - Takes image buffer, name, and type.
+  - Requires `projectRootPath` to be set in the store (accessed via `useFileStore.getState().projectRootPath` in the uploader).
+  - Generates a unique filename.
+  - Saves the image to `projectRootPath/.assets/images/unique-filename`.
+    (The `.assets/images` subdirectory should be created if it doesn't exist).
+  - Returns `{ success: true, url: 'file:///absolute/path/to/projectRootPath/.assets/images/unique-name.png' }` on success.
+    The URL must be an absolute file path usable by Electron to load the image.
+  - Returns `{ success: false, error: 'Error message' }` on failure.
+*/
+
+// Define EDITOR_TOOLS (can be outside the component if it doesn't depend on props/state)
+const EDITOR_TOOLS = {
+  header: Header,
+  list: List,
+  image: {
+    class: ImageTool,
+    config: {
+      uploader: {
+        async uploadByFile(file: File): Promise<{ success: boolean; file: { url: string } } | { success: boolean; error: { message: string } }> {
+          const projectRootPath = useFileStore.getState().projectRootPath;
+          if (!projectRootPath) {
+            console.error("ImageTool: Project root not set. Cannot save image.");
+            return { success: 0, error: { message: "Project root not set. Cannot save image." } };
+          }
+
+          try {
+            // Convert File to ArrayBuffer
+            const arrayBuffer = await file.arrayBuffer();
+            
+            // Call the new Electron API (hypothetical at this stage for main process)
+            const result = await window.electronAPI.saveImage({
+              buffer: arrayBuffer,
+              name: file.name,
+              type: file.type,
+            });
+
+            if (result.success && result.url) {
+              return {
+                success: 1,
+                file: {
+                  url: result.url, // URL provided by the main process
+                },
+              };
+            } else {
+              console.error("Image upload failed:", result.error);
+              return { success: 0, error: { message: result.error || "Image upload to main process failed." } };
+            }
+          } catch (error: any) {
+            console.error("Error processing image for upload:", error);
+            return { success: 0, error: { message: error.message || "Error processing image file." } };
+          }
+        },
+        // uploadByUrl: async (url: string) => { /* Optional: for pasting image URLs */ }
+      },
+    }
+  },
+};
+
 
 const NoteEditorView: React.FC = () => {
   const { noteId: rawNoteId } = useParams<{ noteId: string }>();
@@ -9,30 +80,43 @@ const NoteEditorView: React.FC = () => {
   const {
     currentFilePath,
     currentFileContent,
-    originalFileContent,
+    originalFileContent, // Keep this for the main useEffect dependency if needed
     isDirty,
     isLoading,
     openFile,
     updateCurrentFileContent,
     saveCurrentFile,
-    createNewFile, // Added createNewFile
+    createNewFile, // Now correctly getting from the store (after reset)
+    projectRootPath, // Selecting projectRootPath
+    error: storeError, // Selecting error state
   } = useFileStore();
   
-  const projectRootPath = useFileStore((state) => state.projectRootPath);
-  const storeError = useFileStore((state) => state.error); // Added for error handling
   // const clearError = useFileStore((state) => state.clearError); // NOTE: clearError action is not yet implemented in the store.
   
   const [isNewNoteFlow, setIsNewNoteFlow] = useState(false); // True if current note is new and unsaved
+  // The editorInstanceRef is now part of EditorWrapper
+
+
+  const handleEditorDataChange = (editorData: OutputData) => {
+    // console.log("Editor data changed:", editorData); // For debugging
+    try {
+      const jsonString = JSON.stringify(editorData);
+      updateCurrentFileContent(jsonString);
+    } catch (error) {
+      console.error("Error stringifying editor data:", error);
+      // Optionally, handle or log this error more formally
+    }
+  };
 
   useEffect(() => {
-    if (!projectRootPath && !isLoading) { // isLoading check prevents redirect while projectRootPath might be loading
+    if (!projectRootPath && !isLoading) { 
       console.log("NoteEditorView: No project root. Redirecting to /all-notes.");
       navigate('/all-notes', { replace: true });
     }
   }, [projectRootPath, navigate, isLoading]);
 
   useEffect(() => {
-    if (!projectRootPath) { // Ensure project root is available before proceeding
+    if (!projectRootPath) { 
       return;
     }
 
@@ -40,51 +124,32 @@ const NoteEditorView: React.FC = () => {
 
     if (rawNoteId === "new") {
       setIsNewNoteFlow(true);
-      // If currentFilePath isn't already for an unsaved note, initialize one.
-      // This handles direct navigation to /note/new or refreshing /note/new.
       if (!currentFilePath || !currentFilePath.startsWith('unsaved-')) {
-        const activeNBPath = useFileStore.getState().activeNotebookPath;
+        const activeNBPath = useFileStore.getState().activeNotebookPath; // Get latest for new file
         createNewFile(activeNBPath || null); 
       }
-    } else if (decodedPathFromUrl) { // Existing note path from URL
+    } else if (decodedPathFromUrl) { 
       setIsNewNoteFlow(false);
-      // If the store's current file is not what the URL wants, or if content is missing.
-      // The `!currentFileContent` check is important for cases where currentFilePath might be correct
-      // but the content hasn't been loaded yet (e.g., after a refresh or direct URL entry).
-      // However, ensure it doesn't prevent loading an intentionally empty file.
-      // A better check might be if openFile is needed because the path changed,
-      // or if the path is the same but content is truly absent (not just an empty string for an empty file).
-      // For now, `!currentFileContent` might be too aggressive if empty files are valid and expected.
-      // Let's refine to: if path is different OR if path is same but currentFilePath is null (meaning not loaded yet)
-      if (decodedPathFromUrl !== currentFilePath || (decodedPathFromUrl === currentFilePath && currentFileContent === '' && originalFileContent === '')) {
-         // The condition `currentFileContent === '' && originalFileContent === ''` is a heuristic
-         // to check if the file is "empty" because it hasn't been loaded, versus being an actual empty file.
-         // A more robust way would be for openFile to handle not re-loading if already loaded.
-         // Or for currentFilePath to be null until openFile successfully loads content.
-         // Given the current store, this condition tries to reload if path matches but content seems "unloaded".
-        if(decodedPathFromUrl !== currentFilePath || !useFileStore.getState().originalFileContent) { // Check original content to be more specific
-            openFile(decodedPathFromUrl);
-        }
+      // Condition to open file: path is different, OR path is same but original content not loaded (heuristic)
+      if (decodedPathFromUrl !== currentFilePath || !originalFileContent) { 
+        openFile(decodedPathFromUrl);
       }
     } else { 
-      // No valid rawNoteId or decodedPathFromUrl (e.g. /note/ or /note/#)
       console.warn("NoteEditorView: Invalid or empty noteId in URL after decode. currentFilePath is:", currentFilePath);
-      if (!currentFilePath) { // If no file is active in store, go to all notes
+      if (!currentFilePath) { 
           navigate('/all-notes', { replace: true });
       }
-      // If currentFilePath IS set, AppLayout.tsx's useEffect should handle redirecting to /note/:currentFilePath
-      // So, we might not need to do anything else here if currentFilePath is valid.
     }
-  }, [rawNoteId, currentFilePath, currentFileContent, openFile, createNewFile, navigate, projectRootPath, originalFileContent]);
+  }, [rawNoteId, currentFilePath, openFile, createNewFile, navigate, projectRootPath, originalFileContent]);
 
 
   const handleSave = async () => {
-    await saveCurrentFile();
+    // For Editor.js, currentFileContent will be updated by the editor's onChange callback.
+    // The logic here remains the same for triggering save.
+    await saveCurrentFile(); 
     const savedFilePath = useFileStore.getState().currentFilePath;
-    // If it was a new note flow and the file path is now set (meaning save was successful)
     if (isNewNoteFlow && savedFilePath && !savedFilePath.startsWith('unsaved-')) {
-      setIsNewNoteFlow(false); // No longer a new note flow
-      // Navigate to the new path, replacing /note/new in history
+      setIsNewNoteFlow(false); 
       navigate(`/note/${encodeURIComponent(savedFilePath)}`, { replace: true });
     }
   };
@@ -95,7 +160,6 @@ const NoteEditorView: React.FC = () => {
   useEffect(() => {
     const setTitle = async () => {
       if (isNewNoteFlow && currentFilePath && currentFilePath.startsWith('unsaved-')) {
-        // For new, unsaved notes, use a generic title or extract from temp path if desired
         const tempName = currentFilePath.substring(currentFilePath.lastIndexOf(currentFilePath.includes('/') ? '/' : '\\') + 1);
         setDisplayTitle(`Nueva Nota (${tempName.replace(/\.[^/.]+$/, "")})`);
       } else if (currentFilePath) {
@@ -133,6 +197,30 @@ const NoteEditorView: React.FC = () => {
       </div>
     );
   }
+  
+  // Parse currentFileContent for Editor.js
+  let parsedDataForEditor: OutputData | null = null;
+  if (currentFilePath || isNewNoteFlow) { // Only attempt parse if there's a file context or new note flow
+    if (currentFileContent) {
+      try {
+        parsedDataForEditor = JSON.parse(currentFileContent);
+      } catch (e) {
+        console.warn("Error parsing currentFileContent as JSON. Content might be Markdown or other format. Content:", currentFileContent, "Error:", e);
+        // Display the raw content as a paragraph if it's not JSON
+        parsedDataForEditor = {
+          time: Date.now(),
+          blocks: [{ type: 'paragraph', data: { text: "Error: El contenido de la nota no es JSON válido. Se muestra el contenido original:" } },
+                   { type: 'paragraph', data: { text: currentFileContent } }] // Show raw content
+        };
+      }
+    } else if (isNewNoteFlow && !currentFileContent) {
+        // For a new note flow, if content is empty, default to an empty structure.
+        parsedDataForEditor = { time: Date.now(), blocks: [] }; 
+    }
+    // If currentFileContent is null/empty for an existing file, parsedDataForEditor remains null,
+    // and EditorWrapper will use its default { time: Date.now(), blocks: [] }.
+  }
+
 
   return (
     <div>
@@ -149,42 +237,71 @@ const NoteEditorView: React.FC = () => {
 
       {/*
         // TODO: Future Editor.js Integration Requirements:
-        // 1. Initialization:
-        //    - The Editor.js instance should be initialized with data derived from
-        //      `currentFileContent` from the useFileStore.
-        //    - Note: `currentFileContent` might be raw Markdown or some other format.
-        //      This content may need to be parsed into Editor.js's specific block format
-        //      before being passed to the editor for initialization.
-        //
-        // 2. Content Updates (when currentFilePath or currentFileContent changes):
-        //    - When `currentFilePath` changes (indicating a new note is selected) or
-        //      when `currentFileContent` is updated programmatically (e.g., after reverting changes),
-        //      the Editor.js instance must reflect the new content.
-        //    - Common strategies for this include:
-        //      a) Using a `key` prop on the Editor.js wrapper component, tied to `currentFilePath`.
-        //         Changing the key will cause React to re-mount the component, thus re-initializing
-        //         Editor.js with the new content. This is often the simplest approach.
-        //         Example: `<EditorJsWrapper key={currentFilePath} data={parsedContent} />`
-        //      b) Using a `useEffect` hook that observes `currentFileContent` (or `currentFilePath`).
-        //         When a change is detected, this effect would call an Editor.js API method
-        //         to update its content.
-        //         Example: `editor.render(newBlocks);` or `editor.clear(); editor.blocks.render(newBlocks);`
-        //         This requires careful handling of the editor instance and its lifecycle.
-        //
-        // 3. Saving Content:
-        //    - When saving, the Editor.js instance will provide its content in its specific
-        //      block format. This data will need to be serialized (e.g., to Markdown, HTML, or JSON)
-        //      before being saved as a string in `currentFileContent` via `updateCurrentFileContent`.
+        // (Comment block already present from previous step, no need to re-add)
       */}
-      <textarea
-        className="w-full h-[calc(100vh-10rem)] p-4 bg-bg-secondary text-text-primary border border-border-color rounded-md focus:ring-accent-primary focus:border-accent-primary"
-        value={currentFileContent}
-        onChange={(e) => updateCurrentFileContent(e.target.value)}
-        placeholder="Escribe tu nota aquí..."
-        disabled={isLoading && !isNewNoteFlow} // Disable if loading an existing note
+      <EditorWrapper
+        key={currentFilePath || `new-note-${rawNoteId || Date.now()}`} // Unique key for new notes too
+        initialData={parsedDataForEditor}
+        editorTools={EDITOR_TOOLS}
+        placeholder="Comienza a escribir tu increíble nota aquí..."
+        onChangeCallback={handleEditorDataChange} // Pass the handler
       />
     </div>
   );
 };
+
+// --- EditorWrapper Component ---
+interface EditorWrapperProps {
+  initialData: OutputData | null;
+  onChangeCallback: (data: OutputData) => void; // Renamed for clarity
+  editorTools: any;
+  placeholder: string;
+}
+
+const EditorWrapper: React.FC<EditorWrapperProps> = ({ initialData, onChangeCallback, editorTools, placeholder }) => {
+  const editorInstanceRef = useRef<EditorJS | null>(null);
+  // Using React.useId() for a stable, unique ID per EditorWrapper instance
+  const editorHolderId = `editorjs-holder-${React.useId()}`; 
+
+  useEffect(() => {
+    if (editorInstanceRef.current) { 
+        try {
+            editorInstanceRef.current.destroy();
+        } catch (e) {
+            console.warn("Error destroying previous Editor.js instance in wrapper:", e);
+        }
+        editorInstanceRef.current = null;
+    }
+    
+    const editor = new EditorJS({
+      holder: editorHolderId,
+      tools: editorTools,
+      data: initialData || { time: Date.now(), blocks: [] }, // Default to empty if initialData is null
+      placeholder: placeholder,
+      async onChange(api, event) { // api is an instance of Editor.js API
+        // Check if the editor instance is available, though 'api' should be it.
+        if (api && typeof api.saver.save === 'function') {
+          const outputData = await api.saver.save();
+          onChangeCallback(outputData); // Call the passed-in handler
+        }
+      }
+    });
+    editorInstanceRef.current = editor;
+
+    return () => {
+      if (editorInstanceRef.current && typeof editorInstanceRef.current.destroy === 'function') {
+        try {
+            editorInstanceRef.current.destroy();
+        } catch (e) {
+            console.warn("Error destroying Editor.js instance on unmount:", e);
+        }
+      }
+      editorInstanceRef.current = null; 
+    };
+  }, [initialData, editorTools, placeholder, editorHolderId]); 
+
+  return <div id={editorHolderId} className="prose max-w-none min-h-[calc(100vh-12rem)] bg-bg-alt p-4 rounded-md shadow-inner"/>;
+};
+
 
 export default NoteEditorView;
