@@ -146,6 +146,36 @@ const NoteEditorView: React.FC = () => {
           {isLoading && !isNewNoteFlow ? "Cargando..." : (currentFilePath && !currentFilePath.startsWith('unsaved-') ? "Guardar" : "Guardar Como...")}
         </button>
       </div>
+
+      {/*
+        // TODO: Future Editor.js Integration Requirements:
+        // 1. Initialization:
+        //    - The Editor.js instance should be initialized with data derived from
+        //      `currentFileContent` from the useFileStore.
+        //    - Note: `currentFileContent` might be raw Markdown or some other format.
+        //      This content may need to be parsed into Editor.js's specific block format
+        //      before being passed to the editor for initialization.
+        //
+        // 2. Content Updates (when currentFilePath or currentFileContent changes):
+        //    - When `currentFilePath` changes (indicating a new note is selected) or
+        //      when `currentFileContent` is updated programmatically (e.g., after reverting changes),
+        //      the Editor.js instance must reflect the new content.
+        //    - Common strategies for this include:
+        //      a) Using a `key` prop on the Editor.js wrapper component, tied to `currentFilePath`.
+        //         Changing the key will cause React to re-mount the component, thus re-initializing
+        //         Editor.js with the new content. This is often the simplest approach.
+        //         Example: `<EditorJsWrapper key={currentFilePath} data={parsedContent} />`
+        //      b) Using a `useEffect` hook that observes `currentFileContent` (or `currentFilePath`).
+        //         When a change is detected, this effect would call an Editor.js API method
+        //         to update its content.
+        //         Example: `editor.render(newBlocks);` or `editor.clear(); editor.blocks.render(newBlocks);`
+        //         This requires careful handling of the editor instance and its lifecycle.
+        //
+        // 3. Saving Content:
+        //    - When saving, the Editor.js instance will provide its content in its specific
+        //      block format. This data will need to be serialized (e.g., to Markdown, HTML, or JSON)
+        //      before being saved as a string in `currentFileContent` via `updateCurrentFileContent`.
+      */}
       <textarea
         className="w-full h-[calc(100vh-10rem)] p-4 bg-bg-secondary text-text-primary border border-border-color rounded-md focus:ring-accent-primary focus:border-accent-primary"
         value={currentFileContent}
