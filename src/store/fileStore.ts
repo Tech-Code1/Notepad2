@@ -38,7 +38,7 @@ interface FileStoreState {
   saveCurrentFile: () => Promise<void>;
   saveFileAs: () => Promise<void>; // Para guardar un archivo nuevo o uno existente con otro nombre
   fetchFileSystemTree: (basePath?: string | null) => Promise<void>;
-  createNewFile: (notebookPath?: string) => Promise<{ path: string | null; name: string }>; // Modificado para devolver info
+  createNewFile: (parentPath: string | null) => Promise<{ path: string | null; name: string }>; // MODIFIED SIGNATURE
   deleteFile: (filePath: string) => Promise<void>; // Nueva acción útil
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
@@ -229,40 +229,34 @@ const useFileStore = create<FileStoreState>((set, get) => ({
     }
   },
 
-  createNewFile: async (notebookPath?: string) => { // notebookPath es opcional
-    const tempIdForNewNote = `unsaved-note-${Date.now()}`; // Un ID temporal
-    // Lógica para crear un nuevo archivo
-    // 1. Generar un nombre de archivo único por defecto (ej. "Nota sin título 1.md")
-    // 2. Determinar la ruta donde se crearía (si notebookPath se provee, o en el projectRootPath)
-    // 3. Establecer el estado para un nuevo archivo sin guardar
-    
-    const defaultFileName = `Nota sin título ${Date.now()}.md`; // Ejemplo de nombre único
-    let newFilePathAttempt: string | null = null;
-    const root = notebookPath || get().projectRootPath;
+  createNewFile: async (parentPath: string | null) => { // MODIFIED: signature and logic
+    const timestamp = Date.now();
+    const defaultPageName = `new-page-${timestamp}.md`;
+    let tempIdForNewNote: string;
 
-    if (root) {
-      // Aquí no creamos el archivo en el sistema de archivos aún, solo preparamos el estado.
-      // El archivo se creará físicamente cuando el usuario haga "Guardar" o "Guardar como".
-      // `currentFilePath` será `null` para indicar que es un archivo nuevo sin ruta física.
-      // O, podrías asignar una ruta temporal/placeholder si tu lógica lo requiere.
-      newFilePathAttempt = `${root}${window.electronAPI.pathSeparator()}${defaultFileName}`; // Ruta tentativa
+    if (parentPath) {
+      // Ensure parentPath does not end with a separator before appending another
+      const cleanParentPath = parentPath.endsWith(SEPARATOR) ? parentPath.slice(0, -1) : parentPath;
+      tempIdForNewNote = `unsaved-${cleanParentPath}${SEPARATOR}${defaultPageName}`;
+    } else {
+      tempIdForNewNote = `unsaved-${defaultPageName}`;
     }
+    
+    const defaultDisplayName = "Nueva Página";
 
     set({
-      currentFilePath: tempIdForNewNote, // ¡Importante! Un archivo nuevo no tiene path hasta que se guarda.
-      currentFileContent: `# Nueva Nota\n\n`,
-      originalFileContent: '', // Es nuevo
-      isDirty: true, // Es nuevo y no guardado
+      currentFilePath: tempIdForNewNote,
+      currentFileContent: `# ${defaultDisplayName}\n\n`,
+      originalFileContent: '', // New file has no original content on disk
+      isDirty: true,         // It's new and unsaved
       isLoading: false,
       error: null,
-      activeNotebookPath: notebookPath || null, // Si se crea dentro de un notbook
+      activeNotebookPath: parentPath, // Set active notebook to the parent path
     });
 
-    // Devolvemos un path nulo porque el archivo no existe físicamente aún.
-    // El nombre es útil para la navegación si se usa como parte del ID.
-    // La navegación debería ir a una ruta genérica de "nueva nota" o usar un ID temporal
-    // hasta que se guarde y tenga un path real.
-    return { path: null, name: "Nueva Nota" }; // O el nombre por defecto que generes
+    // The returned path is the temporary ID.
+    // The name is a generic display name.
+    return { path: tempIdForNewNote, name: defaultDisplayName };
   },
 
   deleteFile: async (filePath: string) => {
