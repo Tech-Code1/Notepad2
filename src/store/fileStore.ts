@@ -43,6 +43,8 @@ interface FileStoreState {
   
   // Acciones para seleccionar en FileOutlineSidebar (si es necesario)
   setActiveNotebookPath: (path: string | null) => void;
+
+  clearError: () => void; // New action for clearing errors
 }
 
 const useFileStore = create<FileStoreState>((set, get) => ({
@@ -278,6 +280,8 @@ const useFileStore = create<FileStoreState>((set, get) => ({
       set({ error: `Error al borrar ${filePath}: ${err.message}`, isLoading: false });
     }
   },
+
+  clearError: () => set({ error: null, isLoading: false }), // Also reset isLoading
 
 }));
 

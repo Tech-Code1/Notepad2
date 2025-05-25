@@ -12,7 +12,8 @@ const AllNotesView: React.FC = () => {
     fetchFileSystemTree,
     createNewFile, // Usaremos esto para el botón de crear primera nota
     isLoading,
-    error
+    error,
+    clearError, // Added clearError
   } = useFileStore();
   const navigate = useNavigate();
 
@@ -37,6 +38,7 @@ const AllNotesView: React.FC = () => {
   };
 
   const handleOpenFolder = () => {
+    clearError(); // Clear error before attempting to fetch
     fetchFileSystemTree(null); // Esto debería pedir al usuario que seleccione una carpeta
     // Y luego fetchFileSystemTree debería cargar el contenido y setear projectRootPath
   };

@@ -119,9 +119,10 @@ const NoteEditorView: React.FC = () => {
     createNewFile, // Now correctly getting from the store (after reset)
     projectRootPath, // Selecting projectRootPath
     error: storeError, // Selecting error state
+    clearError, // Added clearError
   } = useFileStore();
   
-  // const clearError = useFileStore((state) => state.clearError); // NOTE: clearError action is not yet implemented in the store.
+  // const clearError = useFileStore((state) => state.clearError); // NOTE: clearError action is not yet implemented in the store. --> This line can be removed
   
   const [isNewNoteFlow, setIsNewNoteFlow] = useState(false); // True if current note is new and unsaved
   // The editorInstanceRef is now part of EditorWrapper
@@ -243,7 +244,7 @@ const NoteEditorView: React.FC = () => {
         <p className="text-md text-text-secondary mb-6 max-w-md">{storeError}</p>
         <button
           onClick={() => {
-            // if (clearError) clearError(); // Would call clearError here if it existed
+            clearError(); // Call clearError before navigating
             navigate('/all-notes', { replace: true });
           }}
           className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-5 rounded-lg text-md"
@@ -281,7 +282,17 @@ const NoteEditorView: React.FC = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">{displayTitle}</h2>
+        <div className="flex items-center"> {/* Wrapper for title and indicator */}
+          <h2 className="text-2xl font-semibold">{displayTitle}</h2>
+          {isDirty && (
+            <span 
+              className="ml-2 text-yellow-500 text-2xl" // Larger yellow dot for visibility
+              title="Cambios sin guardar"
+            >
+              •
+            </span>
+          )}
+        </div>
         <button
           onClick={handleSave}
           disabled={isLoading || !isDirty}
