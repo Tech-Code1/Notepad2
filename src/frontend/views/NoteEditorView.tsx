@@ -1,6 +1,32 @@
 // src/views/NoteEditorView.tsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+// Helper function for debouncing
+// Can be placed at the module level in NoteEditorView.tsx or imported from a utils file
+function debounce<F extends (...args: any[]) => void>(func: F, waitFor: number) {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const debouncedFunc = (...args: Parameters<F>) => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      timeoutId = null; // Clear before calling
+      func(...args);
+    }, waitFor);
+  };
+
+  // Optional: Add a cancel method to the debounced function
+  debouncedFunc.cancel = () => {
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+  
+  return debouncedFunc;
+}
+
 import useFileStore from '@/store/fileStore';
 import EditorJS, { OutputData } from '@editorjs/editorjs'; // Added EditorJS import
 import Header from '@editorjs/header'; // Added Header tool
@@ -99,13 +125,39 @@ const NoteEditorView: React.FC = () => {
   
   const [isNewNoteFlow, setIsNewNoteFlow] = useState(false); // True if current note is new and unsaved
   // The editorInstanceRef is now part of EditorWrapper
+  const storeRef = useRef(useFileStore.getState()); // To access latest state in debounced func
+
+  // Update storeRef on every render so debounced function gets latest state
+  useEffect(() => {
+    storeRef.current = useFileStore.getState();
+  });
+
+  const AUTO_SAVE_DELAY = 2000; // 2 seconds
+
+  const performAutoSave = useCallback(() => {
+    if (storeRef.current.isDirty) {
+      console.log("Auto-saving note..."); // For debugging
+      saveCurrentFile(); 
+    }
+  }, [saveCurrentFile]);
+
+  const debouncedAutoSaveRef = useRef(debounce(performAutoSave, AUTO_SAVE_DELAY));
+
+  // Cleanup debounce timer on component unmount
+  useEffect(() => {
+    const debouncedSave = debouncedAutoSaveRef.current;
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, []); // Empty array ensures this runs once for mount/unmount of NoteEditorView
 
 
   const handleEditorDataChange = (editorData: OutputData) => {
     // console.log("Editor data changed:", editorData); // For debugging
     try {
       const jsonString = JSON.stringify(editorData);
-      updateCurrentFileContent(jsonString);
+      updateCurrentFileContent(jsonString); // This updates currentFileContent and potentially isDirty
+      debouncedAutoSaveRef.current(); // Trigger debounced auto-save
     } catch (error) {
       console.error("Error stringifying editor data:", error);
       // Optionally, handle or log this error more formally
