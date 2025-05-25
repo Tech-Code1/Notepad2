@@ -1,6 +1,6 @@
 // src/components/Sidebar/Sidebar.tsx
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom'; // useNavigate removed
 import useFileStore from '@/store/fileStore';
 import {
   FaRegFileAlt,
@@ -19,8 +19,7 @@ interface NavItem {
 }
 
 const Sidebar: React.FC = () => {
-  const { createNewFile } = useFileStore();
-  const navigate = useNavigate();
+  const { setupDefaultProject } = useFileStore(); // createNewFile and navigate removed
 
   const mainNavItems: NavItem[] = [
     { to: '/all-notes', label: 'All Notes', icon: FaRegFileAlt, exact: true },
@@ -31,17 +30,22 @@ const Sidebar: React.FC = () => {
   ];
 
   const handleNewNoteClick = async () => {
-    const newFile = await createNewFile(); // Asumimos que createNewFile ahora setea currentFilePath y quizás devuelve el path o id
-    if (newFile && newFile.path) {
-      // Extraer un ID o usar el path como ID. Para simplicidad, usaré el nombre base como ID.
-      const noteId = newFile.name.replace(/\.[^/.]+$/, ""); // Elimina extensión
-      navigate(`/note/${encodeURIComponent(noteId)}`); // Navega al editor de la nueva nota
-    } else {
-      // Manejar caso donde la nota no se creó o no se obtuvo path
-      console.error("No se pudo crear la nueva nota o obtener su path.");
-      // Quizás navegar a /all-notes como fallback
-      navigate('/all-notes');
-    }
+    // Call the new store action
+    await setupDefaultProject();
+    
+    // After setupDefaultProject completes, currentFilePath in the store
+    // will be set to the temporary path of the new page.
+    // AppLayout's useEffect will NOT navigate because the path starts with 'unsaved-'.
+    // NoteEditorView will pick up the currentFilePath change and display the new note.
+    // So, no explicit navigation is needed here.
+
+    // Optional: Add error handling
+    // try {
+    //   await setupDefaultProject();
+    // } catch (error) {
+    //   console.error("Error setting up default project:", error);
+    //   // Potentially show a user-facing notification
+    // }
   };
 
   const activeClassName = "bg-gray-700 text-white"; // Tu clase para el item activo
