@@ -45,11 +45,15 @@ const EDITOR_TOOLS = {
             const arrayBuffer = await file.arrayBuffer();
             
             // Call the new Electron API (hypothetical at this stage for main process)
-            const result = await window.electronAPI.saveImage({
-              buffer: arrayBuffer,
-              name: file.name,
-              type: file.type,
-            });
+            // MODIFIED LINE: Ensure projectRootPath is the first argument
+            const result = await window.electronAPI.saveImage(
+              projectRootPath, 
+              {
+                buffer: arrayBuffer,
+                name: file.name,
+                type: file.type,
+              }
+            );
 
             if (result.success && result.url) {
               return {
