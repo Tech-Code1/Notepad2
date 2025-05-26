@@ -48,30 +48,66 @@ const useAuthStore = create<AuthState>((set, get) => ({
   setError: (error) => set({ error, isLoading: false }), // Also set isLoading false on error
   clearAuthError: () => set({ error: null }),
 
-  login: async (credentials) => {
+  login: async (credentials: LoginCredentials) => {
     set({ isLoading: true, error: null });
-    console.log('Attempting login with:', credentials);
-    // Placeholder for API call
-    // Simulating API call
+    console.log('Attempting login with (mocked):', credentials);
+
+    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1000));
-    // Simulate success:
-    // const mockUser: User = { id: 'user-local-123', email: credentials.email, provider: 'local', displayName: 'Logged In User' };
-    // const mockToken = 'mock-jwt-token-local';
-    // get().setUser(mockUser);
-    // get().setToken(mockToken);
-    // set({ isLoading: false });
-    // Simulate failure:
-    set({ error: 'Login failed (placeholder)', isLoading: false });
-    console.log('login action placeholder executed');
+
+    if (credentials.email && !credentials.email.includes("fail")) { // Simulate success
+      const mockUser: User = {
+        id: `user-local-${Date.now()}`, // More unique ID
+        email: credentials.email,
+        provider: 'local',
+        displayName: `User ${credentials.email.split('@')[0]}`, // Basic display name
+        avatarUrl: `https://i.pravatar.cc/150?u=${credentials.email}`, // Placeholder avatar
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockToken = `mock-jwt-${Date.now()}`;
+      
+      get().setUser(mockUser);
+      get().setToken(mockToken); // This will log "Token set. TODO: Persist..."
+      set({ isLoading: false });
+      console.log('Mock login successful for:', credentials.email);
+    } else { // Simulate failure
+      get().setUser(null); // Ensure user and token are cleared on failed login
+      get().setToken(null);
+      set({ error: 'Login failed: Invalid credentials (mock)', isLoading: false });
+      console.log('Mock login failed for:', credentials.email);
+    }
   },
 
-  register: async (data) => {
+  register: async (data: RegisterData) => {
     set({ isLoading: true, error: null });
-    console.log('Attempting registration with:', data);
-    // Placeholder for API call
+    console.log('Attempting registration with (mocked):', data);
+
+    // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 1000));
-    set({ error: 'Registration failed (placeholder)', isLoading: false });
-    console.log('register action placeholder executed');
+
+    if (data.email && !data.email.includes("exist") && !data.email.includes("fail")) {
+      const mockUser: User = {
+        id: `user-local-${Date.now()}`,
+        email: data.email,
+        provider: 'local',
+        displayName: data.displayName || `User ${data.email.split('@')[0]}`,
+        avatarUrl: `https://i.pravatar.cc/150?u=${data.email}`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const mockToken = `mock-jwt-register-${Date.now()}`;
+      
+      get().setUser(mockUser);
+      get().setToken(mockToken);
+      set({ isLoading: false });
+      console.log('Mock registration successful for:', data.email);
+    } else {
+      get().setUser(null);
+      get().setToken(null);
+      set({ error: 'Registration failed: Email already exists (mock)', isLoading: false });
+      console.log('Mock registration failed for:', data.email);
+    }
   },
 
   loginWithGoogle: async () => {
