@@ -10,13 +10,14 @@ export interface IElectronAPI {
   readDirectory: (basePath: string | null) => Promise<{ success: boolean; path?: string; items?: FileSystemItem[]; error?: string }>;
   createNewFileInSystem?: (filePath: string) => Promise<{ success: boolean; path?: string; error?: string }>; // Si tienes esta función
   deleteFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+  saveImage: (projectRootPath: string, fileData: { buffer: ArrayBuffer; name: string; type: string; }) => Promise<{ success: boolean; url?: string; error?: string }>;
   pathSeparator: () => Promise<string>; // Si pathSeparator es una función que devuelve una promesa
   // O si es síncrono y se establece una vez:
   // getPathSeparator: () => string;
   // Y en el preload: contextBridge.exposeInMainWorld('electronAPI', { getPathSeparator: () => require('path').sep })
 
   // Añade cualquier otra función que expongas
-}
+} 
 
 declare global {
     interface Window {

@@ -1,5 +1,5 @@
 // src/views/NoteEditorView.tsx
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 // Helper function for debouncing
 // Can be placed at the module level in NoteEditorView.tsx or imported from a utils file
@@ -63,7 +63,7 @@ const EDITOR_TOOLS = {
           const projectRootPath = useFileStore.getState().projectRootPath;
           if (!projectRootPath) {
             console.error("ImageTool: Project root not set. Cannot save image.");
-            return { success: 0, error: { message: "Project root not set. Cannot save image." } };
+            return { success: false, error: { message: "Project root not set. Cannot save image." } };
           }
 
           try {
@@ -83,18 +83,18 @@ const EDITOR_TOOLS = {
 
             if (result.success && result.url) {
               return {
-                success: 1,
+                success: true,
                 file: {
                   url: result.url, // URL provided by the main process
                 },
               };
             } else {
               console.error("Image upload failed:", result.error);
-              return { success: 0, error: { message: result.error || "Image upload to main process failed." } };
+              return { success: false, error: { message: result.error || "Image upload to main process failed." } };
             }
           } catch (error: any) {
             console.error("Error processing image for upload:", error);
-            return { success: 0, error: { message: error.message || "Error processing image file." } };
+            return { success: false, error: { message: error.message || "Error processing image file." } };
           }
         },
         // uploadByUrl: async (url: string) => { /* Optional: for pasting image URLs */ }
